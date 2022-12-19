@@ -200,8 +200,8 @@ function checkRequiredCredentialsNotEmpty() {
     [ "$MAIL_USERNAME" == "" ] ||
     [ "$MAIL_PASSWORD" == "" ] ||
     [ "$MQTT_AUTH_PASSWORD" == "" ]; then
-    echo -e "${CYAN}(!)${NC} Please provide the required credentials e.g., APP_KEY, DB_PASSWORD, REDIS_PASSWORD, "$(
-    )"MAIL_USERNAME, MAIL_PASSWORD, MQTT_AUTH_PASSWORD in $OUTPUT_DIR/deployment/.env.production file"
+    echo -e "${CYAN}(!)${NC} Please provide the required credentials e.g., APP_KEY, DB_PASSWORD, REDIS_PASSWORD, "`
+    `"MAIL_USERNAME, MAIL_PASSWORD, MQTT_AUTH_PASSWORD in $OUTPUT_DIR/deployment/.env.production file"
     exit 1
   fi
 }
@@ -310,8 +310,8 @@ function buildRedisImage() {
   cd "$OUTPUT_DIR"/redis
 
   docker build -f build/Dockerfile.production -t redis-builder \
-    --build-arg REDIS_USERNAME="$DOCKER_REDIS_USERNAME" \
-    --build-arg REDIS_PASSWORD="$DOCKER_REDIS_PASSWORD" .
+              --build-arg REDIS_USERNAME="$DOCKER_REDIS_USERNAME" \
+              --build-arg REDIS_PASSWORD="$DOCKER_REDIS_PASSWORD" .
 
   # Create acl named volume for redis
   docker run -d --name=redis-builder -v iotportaldevicemanagement_redis-acl:/etc/redis/acl redis-builder
