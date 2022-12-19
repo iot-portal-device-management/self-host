@@ -113,15 +113,25 @@ function restart() {
 function dockerComposeUp() {
   cd "$OUTPUT_DIR"/deployment
 
-  $docker_compose_command -f compose/docker-compose.yml -p iotportaldevicemanagement --env-file .env.production up -d
+  $docker_compose_command -f compose/docker-compose.yml \
+                          -f compose/docker-compose.production.yml \
+                          -p iotportaldevicemanagement \
+                          --env-file .env.production up -d
 }
 
 function dockerComposeDown() {
   cd "$OUTPUT_DIR"/deployment
 
-  if [ "$($docker_compose_command -f compose/docker-compose.yml -p iotportaldevicemanagement --env-file .env.production ps | wc -l)" -gt 1 ]; then
+  if [ "$($docker_compose_command \
+    -f compose/docker-compose.yml \
+    -f compose/docker-compose.production.yml \
+    -p iotportaldevicemanagement \
+    --env-file .env.production ps | wc -l)" -gt 1 ]; then
     echo -e "${CYAN}(!)${NC} Shutting down existing deployment..."
-    $docker_compose_command -f compose/docker-compose.yml -p iotportaldevicemanagement --env-file .env.production down
+    $docker_compose_command -f compose/docker-compose.yml \
+                            -f compose/docker-compose.production.yml \
+                            -p iotportaldevicemanagement \
+                            --env-file .env.production down
   fi
 }
 
@@ -184,16 +194,17 @@ function uninstall() {
 function checkRequiredCredentialsNotEmpty() {
   readEnvs
 
-  if [ "$DB_PASSWORD" == "" ] \
-  || [ "$REDIS_PASSWORD" == "" ] \
-  || [ "$MAIL_PASSWORD" == "" ] \
-  || [ "$MQTT_AUTH_PASSWORD" == "" ]; then
-    echo -e "${CYAN}(!)${NC} Please provide the required credentials e.g., DB_PASSWORD, REDIS_PASSWORD, MAIL_PASSWORD, "`
-    `"MQTT_AUTH_PASSWORD in $OUTPUT_DIR/deployment/.env.production file"
+  if [ "$APP_KEY" == "" ] ||
+    [ "$DB_PASSWORD" == "" ] ||
+    [ "$REDIS_PASSWORD" == "" ] ||
+    [ "$MAIL_USERNAME" == "" ] ||
+    [ "$MAIL_PASSWORD" == "" ] ||
+    [ "$MQTT_AUTH_PASSWORD" == "" ]; then
+    echo -e "${CYAN}(!)${NC} Please provide the required credentials e.g., APP_KEY, DB_PASSWORD, REDIS_PASSWORD, "$(
+    )"MAIL_USERNAME, MAIL_PASSWORD, MQTT_AUTH_PASSWORD in $OUTPUT_DIR/deployment/.env.production file"
     exit 1
   fi
 }
-
 
 function cloneRepos() {
   if [ ! -d "$OUTPUT_DIR/api" ]; then
@@ -326,8 +337,8 @@ function buildWebImage() {
 function createNamedVolume() {
   echo "Creating named volume $1"
   docker volume create --driver local \
-                        --label "com.iotportaldevicemanagement.product=iotportaldevicemanagement" \
-                        "$1"
+    --label "com.iotportaldevicemanagement.product=iotportaldevicemanagement" \
+    "$1"
 }
 
 function dockerImagePrune() {
