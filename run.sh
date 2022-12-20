@@ -194,8 +194,8 @@ function checkRequiredCredentialsNotEmpty() {
     [ "$MAIL_USERNAME" == "" ] ||
     [ "$MAIL_PASSWORD" == "" ] ||
     [ "$MQTT_AUTH_PASSWORD" == "" ]; then
-    echo -e "${CYAN}(!)${NC} Please provide the required credentials e.g., APP_KEY, DB_PASSWORD, REDIS_PASSWORD, "$(
-    )"MAIL_USERNAME, MAIL_PASSWORD, MQTT_AUTH_PASSWORD in $OUTPUT_DIR/deployment/.env.production file"
+    echo -e "${CYAN}(!)${NC} Please provide the required credentials e.g., DB_PASSWORD, REDIS_PASSWORD, MAIL_USERNAME,"$(
+    )" MAIL_PASSWORD, MQTT_AUTH_PASSWORD in $OUTPUT_DIR/deployment/.env.production file"
     exit 1
   fi
 }
