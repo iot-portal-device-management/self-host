@@ -240,6 +240,11 @@ function generateCredentials() {
     echo -e "${CYAN}(!)${NC} Generating APP_KEY..."
     APP_KEY=$(docker run --rm --entrypoint php iotportaldevicemanagement-api artisan key:generate --show)
     sed -i "s~APP_KEY=.*~APP_KEY=$APP_KEY~g" .env.production
+  elif [ "$GENERATE_APP_KEY" == "n" ]; then
+    echo -e "${CYAN}(!)${NC} Skipping generate APP_KEY..."
+  else
+    echo -e "${CYAN}(!) IoT Portal Device Management installation canceled. ${NC}"
+    exit 1
   fi
 
   sed -i "s~APP_HOST=.*~APP_HOST=$DOMAIN~g" .env.production
