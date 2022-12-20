@@ -58,6 +58,9 @@ if [ $# -gt 9 ]; then
   WEB_VERSION=${10}
 fi
 
+CERTIFICATE_OUTPUT_DIR="$OUTPUT_DIR"/certificates
+COMPOSE_FILE_PARAMETERS="-f compose/docker-compose.yml -f compose/docker-compose.production.yml"
+
 # Functions
 
 function install() {
@@ -113,25 +116,17 @@ function restart() {
 function dockerComposeUp() {
   cd "$OUTPUT_DIR"/deployment
 
-  $docker_compose_command -f compose/docker-compose.yml \
-                          -f compose/docker-compose.production.yml \
-                          -p iotportaldevicemanagement \
-                          --env-file .env.production up -d
+  $docker_compose_command "$COMPOSE_FILE_PARAMETERS" -p iotportaldevicemanagement --env-file .env.production up -d
 }
 
 function dockerComposeDown() {
   cd "$OUTPUT_DIR"/deployment
 
-  if [ "$($docker_compose_command \
-    -f compose/docker-compose.yml \
-    -f compose/docker-compose.production.yml \
+  if [ "$($docker_compose_command "$COMPOSE_FILE_PARAMETERS" \
     -p iotportaldevicemanagement \
     --env-file .env.production ps | wc -l)" -gt 1 ]; then
     echo -e "${CYAN}(!)${NC} Shutting down existing deployment..."
-    $docker_compose_command -f compose/docker-compose.yml \
-                            -f compose/docker-compose.production.yml \
-                            -p iotportaldevicemanagement \
-                            --env-file .env.production down
+    $docker_compose_command "$COMPOSE_FILE_PARAMETERS" -p iotportaldevicemanagement --env-file .env.production down
   fi
 }
 
@@ -164,8 +159,8 @@ function clearDb() {
 }
 
 function uninstall() {
-  echo -e -n "${RED}WARNING: ALL DATA WILL BE REMOVED, INCLUDING THE FOLDER $OUTPUT_DIR): Are you sure you want to "`
-  `"uninstall IoT Portal Device Management? (y/n): ${NC}"
+  echo -e -n "${RED}WARNING: ALL DATA WILL BE REMOVED, INCLUDING THE FOLDER $OUTPUT_DIR: Are you sure you want to "$(
+  )"uninstall IoT Portal Device Management? (y/n): ${NC}"
   read UNINSTALL_ACTION
 
   if [ "$UNINSTALL_ACTION" == "y" ]; then
@@ -200,8 +195,8 @@ function checkRequiredCredentialsNotEmpty() {
     [ "$MAIL_USERNAME" == "" ] ||
     [ "$MAIL_PASSWORD" == "" ] ||
     [ "$MQTT_AUTH_PASSWORD" == "" ]; then
-    echo -e "${CYAN}(!)${NC} Please provide the required credentials e.g., APP_KEY, DB_PASSWORD, REDIS_PASSWORD, "`
-    `"MAIL_USERNAME, MAIL_PASSWORD, MQTT_AUTH_PASSWORD in $OUTPUT_DIR/deployment/.env.production file"
+    echo -e "${CYAN}(!)${NC} Please provide the required credentials e.g., APP_KEY, DB_PASSWORD, REDIS_PASSWORD, "$(
+    )"MAIL_USERNAME, MAIL_PASSWORD, MQTT_AUTH_PASSWORD in $OUTPUT_DIR/deployment/.env.production file"
     exit 1
   fi
 }
@@ -282,6 +277,14 @@ function generateCerts() {
     -v iotportaldevicemanagement_vernemq-certificates:/vernemq-certificates \
     iotportaldevicemanagement-builder
 
+  # Copy the certificates and keys out for backup
+  createCertificatesDir
+  docker cp iotportaldevicemanagement-builder:/certificates/* "$CERTIFICATE_OUTPUT_DIR"
+  docker cp iotportaldevicemanagement-builder:/nginx-certificates/* "$CERTIFICATE_OUTPUT_DIR"/nginx-certificates
+  docker cp iotportaldevicemanagement-builder:/postgres-certificates/* "$CERTIFICATE_OUTPUT_DIR"/postgres-certificates
+  docker cp iotportaldevicemanagement-builder:/redis-certificates/* "$CERTIFICATE_OUTPUT_DIR"/redis-certificates
+  docker cp iotportaldevicemanagement-builder:/vernemq-certificates/* "$CERTIFICATE_OUTPUT_DIR"/vernemq-certificates
+
   docker container stop iotportaldevicemanagement-builder
   docker container rm iotportaldevicemanagement-builder
 }
@@ -310,8 +313,8 @@ function buildRedisImage() {
   cd "$OUTPUT_DIR"/redis
 
   docker build -f build/Dockerfile.production -t redis-builder \
-              --build-arg REDIS_USERNAME="$DOCKER_REDIS_USERNAME" \
-              --build-arg REDIS_PASSWORD="$DOCKER_REDIS_PASSWORD" .
+    --build-arg REDIS_USERNAME="$DOCKER_REDIS_USERNAME" \
+    --build-arg REDIS_PASSWORD="$DOCKER_REDIS_PASSWORD" .
 
   # Create acl named volume for redis
   docker run -d --name=redis-builder -v iotportaldevicemanagement_redis-acl:/etc/redis/acl redis-builder
@@ -343,6 +346,20 @@ function createNamedVolume() {
 
 function dockerImagePrune() {
   docker image prune --all --force --filter="label=com.iotportaldevicemanagement.product=iotportaldevicemanagement"
+}
+
+function createCertificatesDir() {
+  createDir "$CERTIFICATE_OUTPUT_DIR/nginx-certificates"
+  createDir "$CERTIFICATE_OUTPUT_DIR/postgres-certificates"
+  createDir "$CERTIFICATE_OUTPUT_DIR/redis-certificates"
+  createDir "$CERTIFICATE_OUTPUT_DIR/vernemq-certificates"
+}
+
+function createDir() {
+  if [ ! -d "$1" ]; then
+    echo "Creating directory $1"
+    mkdir -p "$1"
+  fi
 }
 
 # Commands
