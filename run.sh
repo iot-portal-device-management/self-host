@@ -189,8 +189,7 @@ function uninstall() {
 function checkRequiredCredentialsNotEmpty() {
   readEnvs
 
-  if [ "$APP_KEY" == "" ] ||
-    [ "$DB_PASSWORD" == "" ] ||
+  if [ "$DB_PASSWORD" == "" ] ||
     [ "$REDIS_PASSWORD" == "" ] ||
     [ "$MAIL_USERNAME" == "" ] ||
     [ "$MAIL_PASSWORD" == "" ] ||
