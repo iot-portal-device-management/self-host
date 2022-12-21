@@ -59,7 +59,7 @@ if [ $# -gt 9 ]; then
 fi
 
 CERTIFICATE_OUTPUT_DIR="$OUTPUT_DIR"/certificates
-COMPOSE_FILE_PARAMETERS="-f compose/docker-compose.yml -f compose/docker-compose.production.yml"
+COMPOSE_FILE_ARGS=(-f compose/docker-compose.yml -f compose/docker-compose.production.yml)
 
 # Functions
 
@@ -116,17 +116,17 @@ function restart() {
 function dockerComposeUp() {
   cd "$OUTPUT_DIR"/deployment
 
-  $docker_compose_command "$COMPOSE_FILE_PARAMETERS" -p iotportaldevicemanagement --env-file .env.production up -d
+  $docker_compose_command "${COMPOSE_FILE_ARGS[@]}" -p iotportaldevicemanagement --env-file .env.production up -d
 }
 
 function dockerComposeDown() {
   cd "$OUTPUT_DIR"/deployment
 
-  if [ "$($docker_compose_command "$COMPOSE_FILE_PARAMETERS" \
+  if [ "$($docker_compose_command "${COMPOSE_FILE_ARGS[@]}" \
     -p iotportaldevicemanagement \
     --env-file .env.production ps | wc -l)" -gt 1 ]; then
     echo -e "${CYAN}(!)${NC} Shutting down existing deployment..."
-    $docker_compose_command "$COMPOSE_FILE_PARAMETERS" -p iotportaldevicemanagement --env-file .env.production down
+    $docker_compose_command "${COMPOSE_FILE_ARGS[@]}" -p iotportaldevicemanagement --env-file .env.production down
   fi
 }
 
@@ -283,11 +283,11 @@ function generateCerts() {
 
   # Copy the certificates and keys out for backup
   createCertificatesDir
-  docker cp iotportaldevicemanagement-builder:/certificates/* "$CERTIFICATE_OUTPUT_DIR"
-  docker cp iotportaldevicemanagement-builder:/nginx-certificates/* "$CERTIFICATE_OUTPUT_DIR"/nginx-certificates
-  docker cp iotportaldevicemanagement-builder:/postgres-certificates/* "$CERTIFICATE_OUTPUT_DIR"/postgres-certificates
-  docker cp iotportaldevicemanagement-builder:/redis-certificates/* "$CERTIFICATE_OUTPUT_DIR"/redis-certificates
-  docker cp iotportaldevicemanagement-builder:/vernemq-certificates/* "$CERTIFICATE_OUTPUT_DIR"/vernemq-certificates
+  docker cp iotportaldevicemanagement-builder:/certificates/. "$CERTIFICATE_OUTPUT_DIR"
+  docker cp iotportaldevicemanagement-builder:/nginx-certificates/. "$CERTIFICATE_OUTPUT_DIR"/nginx-certificates
+  docker cp iotportaldevicemanagement-builder:/postgres-certificates/. "$CERTIFICATE_OUTPUT_DIR"/postgres-certificates
+  docker cp iotportaldevicemanagement-builder:/redis-certificates/. "$CERTIFICATE_OUTPUT_DIR"/redis-certificates
+  docker cp iotportaldevicemanagement-builder:/vernemq-certificates/. "$CERTIFICATE_OUTPUT_DIR"/vernemq-certificates
 
   docker container stop iotportaldevicemanagement-builder
   docker container rm iotportaldevicemanagement-builder
@@ -338,7 +338,8 @@ function buildVernemqImage() {
 function buildWebImage() {
   cd "$OUTPUT_DIR"/web
 
-  docker build -f dockerfiles/Dockerfile.production -t iotportaldevicemanagement-web .
+  docker build -f dockerfiles/Dockerfile.production -t iotportaldevicemanagement-web \
+      --build-arg NEXT_PUBLIC_VERSION="$NEXT_PUBLIC_VERSION" .
 }
 
 function createNamedVolume() {
