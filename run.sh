@@ -195,7 +195,8 @@ function checkRequiredCredentialsNotEmpty() {
     [ "$MAIL_PASSWORD" == "" ] ||
     [ "$MQTT_AUTH_PASSWORD" == "" ]; then
     echo -e "${CYAN}(!)${NC} Please provide the required credentials e.g., DB_PASSWORD, REDIS_PASSWORD, MAIL_USERNAME,"$(
-    )" MAIL_PASSWORD, MQTT_AUTH_PASSWORD in $OUTPUT_DIR/deployment/.env.production file"
+    )" MAIL_PASSWORD, MQTT_AUTH_PASSWORD in $OUTPUT_DIR/deployment/.env.production file and run"$(
+    )"\"./iotportaldevicemanagement.sh offline-install\""
     exit 1
   fi
 }
@@ -339,7 +340,7 @@ function buildWebImage() {
   cd "$OUTPUT_DIR"/web
 
   docker build -f dockerfiles/Dockerfile.production -t iotportaldevicemanagement-web \
-      --build-arg NEXT_PUBLIC_VERSION="$NEXT_PUBLIC_VERSION" .
+    --build-arg NEXT_PUBLIC_VERSION="$NEXT_PUBLIC_VERSION" .
 }
 
 function createNamedVolume() {
