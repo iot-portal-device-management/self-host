@@ -131,7 +131,7 @@ Command | Description
 
 *Use these commands cautiously. Some commands are intended for development purpose only.*
 
-## ⚒️ In-Band Manageability Integration
+## ⚒️ Intel® In-Band Manageability Integration
 
 Read our [Integration Guide][inb-integration] to learn how to integrate the IoT Portal Device Management adapter into 
 [Intel® In-Band Manageability][intel-inb-manageability].  
