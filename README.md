@@ -1,10 +1,12 @@
 <h1 align="center">
-  <a href="https://github.com/intel/IoTPortal">
-    IoT Portal Device Management
+  <a href="https://github.com/iot-portal-device-management/self-host">
+    Self Host Repository
   </a>
 </h1>
 
-IoT Portal Device Management is a web application that interacts with Intel In-Band Manageability to provide remote over-the-air (OTA) updates to IoT devices. It supports Firmware OTA (FOTA), Software OTA (SOTA), Application OTA (AOTA) and Configuration OTA (COTA). 
+IoT Portal Device Management is a web application that interacts with Intel In-Band Manageability to provide remote 
+over-the-air (OTA) updates to IoT devices. It supports Firmware OTA (FOTA), Software OTA (SOTA), Application OTA (AOTA) 
+and Configuration OTA (COTA). 
 
 - Supports FOTA, SOTA, AOTA and COTA features.
 - Device categorization feature.
@@ -35,7 +37,8 @@ curl -fsSL https://get.docker.com -o get-docker.sh
 sudo VERSION=20.10 sh get-docker.sh
 ```
 
-Optionally, manage Docker as a non-root user by following the instructions at [Manage Docker as a non-root user](https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user).
+Optionally, manage Docker as a non-root user by following the instructions at 
+[Manage Docker as a non-root user](https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user).
 
 ```shell
 sudo groupadd docker
@@ -57,7 +60,7 @@ chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
 Clone the repository to your system:
 
 ```shell
-git clone https://github.com/intel/iot-portal-device-management/self-host
+git clone https://github.com/iot-portal-device-management/self-host
 ```
 
 Navigate to the `self-host` directory and give it permission to execute:
