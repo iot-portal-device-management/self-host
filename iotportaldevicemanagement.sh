@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+#
+# Copyright (C) 2021-2022. Intel Corporation
+# SPDX-License-Identifier: MIT
+#
+
 set -e
 
 cat <<"EOF"

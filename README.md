@@ -149,5 +149,4 @@ working on this project. Please commit any pull requests against the `main` bran
 
 ## 📄 License
 
-IoT Portal Device Management is open-sourced software licensed under the 
-[GPL-2.0-or-later license](https://spdx.org/licenses/GPL-2.0-or-later.html).
+This project is open-sourced software licensed under the [MIT License](https://spdx.org/licenses/MIT.html).

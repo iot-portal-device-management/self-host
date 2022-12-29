@@ -1,5 +1,5 @@
 <h1 align="center">
-  In-Band Manageability
+  Intel® In-Band Manageability
 </h1>
 
 IoT Portal Device Management requires [Intel® In-Band Manageability][intel-inb-manageability] (INB) to be installed on 
