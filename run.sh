@@ -24,6 +24,7 @@ if [ $# -gt 1 ]; then
 fi
 
 SOURCE_URL="https://github.com/intel-innersource/applications.manageability.iot-portal-device-management."
+DOCKER_VERNEMQ_SOURCE_URL="https://github.com/vernemq/"
 if [ $# -gt 2 ]; then
   SOURCE_URL=$3
 fi
@@ -224,7 +225,7 @@ function cloneRepos() {
   fi
 
   if [ ! -d "$OUTPUT_DIR/docker-vernemq" ]; then
-    git clone --depth 1 --branch "$VERNEMQ_VERSION" "$SOURCE_URL"docker-vernemq "$OUTPUT_DIR"/docker-vernemq
+    git clone --depth 1 --branch "$VERNEMQ_VERSION" "$DOCKER_VERNEMQ_SOURCE_URL"docker-vernemq "$OUTPUT_DIR"/docker-vernemq
   fi
 
   if [ ! -d "$OUTPUT_DIR/web" ]; then
