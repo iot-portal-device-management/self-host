@@ -18,7 +18,7 @@ and Configuration OTA (COTA).
 ## 📋 Requirements
 
 - [Docker Engine 20.10](https://docs.docker.com/engine/install/ubuntu/)
-- [Docker Compose 1.29.2](https://docs.docker.com/compose/install/)
+- [Docker Compose 2.14.2](https://docs.docker.com/compose/install/)
 
 *These dependencies are free to use.*
 
