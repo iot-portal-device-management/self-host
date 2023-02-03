@@ -41,15 +41,15 @@ else
   docker_compose_command='docker compose'
 fi
 
-SOURCE_URL="https://github.com/intel-innersource/applications.manageability.iot-portal-device-management."
-CORE_VERSION="2.0.0"
-DEPLOYMENT_VERSION="2.0.0"
-API_VERSION="2.0.0"
-NGINX_VERSION="1.23.2-alpine"
-POSTGRES_VERSION="15.0-alpine3.16"
-REDIS_VERSION="7.0.5-alpine3.16"
+SOURCE_URL="https://github.com/iot-portal-device-management"
+CORE_VERSION="v2.0.0"
+DEPLOYMENT_VERSION="v2.0.0"
+API_VERSION="v2.0.0"
+NGINX_VERSION="v1.23.2-alpine"
+POSTGRES_VERSION="v15.0-alpine3.16"
+REDIS_VERSION="v7.0.5-alpine3.16"
 VERNEMQ_VERSION="1.12.3"
-WEB_VERSION="2.0.0"
+WEB_VERSION="v2.0.0"
 
 # Echo version
 
