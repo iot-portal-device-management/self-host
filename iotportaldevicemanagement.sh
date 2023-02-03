@@ -41,7 +41,7 @@ else
   docker_compose_command='docker compose'
 fi
 
-SOURCE_URL="https://github.com/iot-portal-device-management"
+SOURCE_URL="https://github.com/iot-portal-device-management/"
 CORE_VERSION="v2.0.0"
 DEPLOYMENT_VERSION="v2.0.0"
 API_VERSION="v2.0.0"

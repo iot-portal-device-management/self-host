@@ -23,7 +23,7 @@ if [ $# -gt 1 ]; then
   OUTPUT_DIR=$2
 fi
 
-SOURCE_URL="https://github.com/iot-portal-device-management"
+SOURCE_URL="https://github.com/iot-portal-device-management/"
 DOCKER_VERNEMQ_SOURCE_URL="https://github.com/vernemq/"
 if [ $# -gt 2 ]; then
   SOURCE_URL=$3
