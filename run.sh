@@ -1,410 +1,241 @@
 #!/usr/bin/env bash
-#
-# Copyright (C) 2021-2023 Intel Corporation
-# SPDX-License-Identifier: MIT
-#
 
-set -e
+# Define a variable for the Docker registry mirror URL
+docker_registry_mirror_url="https://dockerhubcache.caas.intel.com"
 
-# Setup
+PS3='Select the closest proxy server to this system: '
+proxys=("United States" "India" "Israel" "Ireland" "Germany" "Malaysia" "China" "DMZ")
+proxy_servers=("proxy-us.intel.com" "proxy-iind.intel.com" "proxy-iil.intel.com" "proxy-ir.intel.com" "proxy-mu.intel.com" "proxy-png.intel.com" "proxy-prc.intel.com" "proxy-dmz.intel.com")
 
-if command -v docker-compose &>/dev/null; then
-  docker_compose_command='docker-compose'
+select proxy in "${proxys[@]}"
+do
+  case $proxy in
+    "United States") server=${proxy_servers[0]} ;;
+    "India") server=${proxy_servers[1]} ;;
+    "Israel") server=${proxy_servers[2]} ;;
+    "Ireland") server=${proxy_servers[3]} ;;
+    "Germany") server=${proxy_servers[4]} ;;
+    "Malaysia") server=${proxy_servers[5]} ;;
+    "China") server=${proxy_servers[6]} ;;
+    "DMZ") server=${proxy_servers[7]} ;;
+    *) echo "Invalid proxy"; continue ;;
+  esac
+  break
+done
+
+# Define variables for proxy ports
+http_https_port=912
+ftp_port=21
+socks_port=1080
+
+# Define a variable for the autoproxy URL
+autoproxy_url="http://wpad.intel.com/wpad.dat"
+
+# Define a single variable for the proxy exclusion list
+proxy_exclusion_list="backend,trainer-runner,task-runner,postgres,redis,chromadb,host.docker.internal,*.fm.intel.com,fm.intel.com,*.goto.intel.com,goto.intel.com,*.certificates.intel.com,certificates.intel.com,*.iglb.intel.com,iglb.intel.com,*.gfx-assets.intel.com,gfx-assets.intel.com,*.caas.intel.com,caas.intel.com,*.devtools.intel.com,devtools.intel.com,ubit-artifactory-or.intel.com,ubit-artifactory-sh.intel.com,10.0.0.0/8,192.168.0.0/16,localhost,.local,127.0.0.0/8,134.134.0.0/16"
+
+# Append the system's IP address to the proxy exclusion list
+system_ip=$(ip route get 1 | awk '{print $7}' | head -1)
+proxy_exclusion_list="${proxy_exclusion_list},${system_ip}"
+
+# Check if the script is run as root
+if [ "$(id -u)" -eq 0 ]; then
+  SUDO=""
 else
-  docker_compose_command='docker compose'
+  SUDO="sudo"
 fi
 
-CYAN='\033[0;36m'
-RED='\033[1;31m'
-NC='\033[0m' # No Color
+function add_line() {
+  local file=$1
+  local newline=$2
+  local searchstring=$3
+  local linenum
 
-OUTPUT_DIR=".."
-if [ $# -gt 1 ]; then
-  OUTPUT_DIR=$2
-fi
-
-SOURCE_URL="https://github.com/iot-portal-device-management/"
-DOCKER_VERNEMQ_SOURCE_URL="https://github.com/vernemq/"
-if [ $# -gt 2 ]; then
-  SOURCE_URL=$3
-fi
-
-DEPLOYMENT_VERSION="main"
-if [ $# -gt 3 ]; then
-  DEPLOYMENT_VERSION=$4
-fi
-
-API_VERSION="main"
-if [ $# -gt 4 ]; then
-  API_VERSION=$5
-fi
-
-NGINX_VERSION="main"
-if [ $# -gt 5 ]; then
-  NGINX_VERSION=$6
-fi
-
-POSTGRES_VERSION="main"
-if [ $# -gt 6 ]; then
-  POSTGRES_VERSION=$7
-fi
-
-REDIS_VERSION="main"
-if [ $# -gt 7 ]; then
-  REDIS_VERSION=$8
-fi
-
-VERNEMQ_VERSION="master"
-if [ $# -gt 8 ]; then
-  VERNEMQ_VERSION=$9
-fi
-
-WEB_VERSION="main"
-if [ $# -gt 9 ]; then
-  WEB_VERSION=${10}
-fi
-
-CERTIFICATE_OUTPUT_DIR="$OUTPUT_DIR"/certificates
-COMPOSE_FILE_ARGS=(-f compose/docker-compose.yml -f compose/docker-compose.production.yml)
-
-# Functions
-
-function install() {
-  if [ "$1" == "pull" ]; then
-    cloneRepos
-  fi
-
-  checkRequiredCredentialsNotEmpty
-
-  echo -e -n "${CYAN}(!)${NC} Enter the domain name for your IoT Portal Device Management instance (ex. iotportaldevicemanagement.com): "
-  read DOMAIN
-  echo ""
-
-  if [ "$DOMAIN" == "" ]; then
-    # Ensure net-tools exists before proceeding
-    if ! command -v ip &>/dev/null; then
-      echo -e "${CYAN}(!)${NC} Installing dependencies..."
-      sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null
-      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq net-tools >/dev/null
-    fi
-
-    # Determine default host machine IP address and assign as domain
-    DOMAIN=$(ip route get 1 | awk '{print $7}' | head -1)
-  fi
-
-  echo -e -n "${CYAN}(!)${NC} Generate and replace APP_KEY? (y/n): "
-  read GENERATE_APP_KEY
-
-  # Build the API image required for key generation
-  buildApiImage
-  generateCredentials "$DOMAIN" "$GENERATE_APP_KEY"
-
-  # Resource the .env.production file
-  readEnvs
-
-  # Create named volumes and label them first
-  createNamedVolumes
-  generateCerts "$DOMAIN"
-
-  # Build other required images
-  buildNginxImage
-  buildPostgresImage
-  buildRedisImage
-  buildVernemqImage
-  buildWebImage
-}
-
-function restart() {
-  dockerComposeDown
-  dockerComposeUp
-}
-
-function dockerComposeUp() {
-  cd "$OUTPUT_DIR"/deployment
-
-  $docker_compose_command "${COMPOSE_FILE_ARGS[@]}" -p iotportaldevicemanagement --env-file .env.production up -d
-}
-
-function dockerComposeDown() {
-  cd "$OUTPUT_DIR"/deployment
-
-  if [ "$($docker_compose_command "${COMPOSE_FILE_ARGS[@]}" \
-    -p iotportaldevicemanagement \
-    --env-file .env.production ps | wc -l)" -gt 1 ]; then
-    echo -e "${CYAN}(!)${NC} Shutting down existing deployment..."
-    $docker_compose_command "${COMPOSE_FILE_ARGS[@]}" -p iotportaldevicemanagement --env-file .env.production down
-  fi
-}
-
-function rebuild() {
-  dockerComposeDown
-  dockerImagePrune
-  install
-}
-
-function migrateDb() {
-  docker exec -it iotportaldevicemanagement-api php artisan migrate --force
-}
-
-function seedDb() {
-  docker exec -it iotportaldevicemanagement-api php artisan db:seed --force
-}
-
-function seedDbSample() {
-  docker exec -it iotportaldevicemanagement-api php artisan db:seed --class=SampleDatabaseSeeder --force
-}
-
-function clearDb() {
-  echo -e -n "${RED}(!) This will clear the entire database records. Continue? (Y/N): ${NC}"
-  read ANSWER
-  echo ""
-
-  if [ "$ANSWER" == "y" ] || [ "$ANSWER" == "Y" ]; then
-    docker exec -it iotportaldevicemanagement-api php artisan migrate:fresh --force
-  fi
-}
-
-function uninstall() {
-  echo -e -n "${RED}WARNING: ALL DATA WILL BE REMOVED, INCLUDING THE FOLDER $OUTPUT_DIR: Are you sure you want to "$(
-  )"uninstall IoT Portal Device Management? (y/n): ${NC}"
-  read UNINSTALL_ACTION
-
-  if [ "$UNINSTALL_ACTION" == "y" ]; then
-    echo -e "${CYAN}(!)${NC} Uninstalling IoT Portal Device Management..."
-    dockerComposeDown
-
-    echo -e "${CYAN}(!)${NC} Removing $OUTPUT_DIR"
-    rm -rf "$OUTPUT_DIR"
-
-    echo -e "${CYAN}(!)${NC} Removing IoT Portal Device Management container images..."
-    dockerImagePrune
-
-    echo -e -n "${RED}(!) Would you like to prune all local IoT Portal Device Management docker volumes? (y/n): ${NC}"
-    read PURNE_ACTION
-
-    if [ "$PURNE_ACTION" == "y" ]; then
-      docker volume prune --force --filter="label=com.iotportaldevicemanagement.product=iotportaldevicemanagement"
-      echo -e "${CYAN}IoT Portal Device Management uninstall completed! ${NC}"
+  if [ -e "$file" ]; then
+    linenum=$(grep -n "$searchstring" "$file" | grep -Eo '^[^:]+')
+    if [ $? -eq 0 ]; then
+      local safenewline
+      safenewline=$(printf "%s" "$newline" | sed -e 's/[\/&]/\\&/g')
+      $SUDO sed -i "${linenum}s/.*/${safenewline}/" "$file"
+    else
+      $SUDO bash -c "echo '$newline' >> $file"
     fi
   else
-    echo -e "${CYAN}(!) IoT Portal Device Management uninstall canceled. ${NC}"
-    exit 1
+    $SUDO bash -c "echo '$newline' >> $file"
   fi
 }
 
-function checkRequiredCredentialsNotEmpty() {
-  readEnvs
+function setup_proxies() {
+  add_line "/etc/environment" "http_proxy=http://${server}:${http_https_port}" "http_proxy"
+  add_line "/etc/environment" "https_proxy=http://${server}:${http_https_port}" "https_proxy"
+  add_line "/etc/environment" "ftp_proxy=http://${server}:${ftp_port}" "ftp_proxy"
+  add_line "/etc/environment" "socks_proxy=http://${server}:${socks_port}" "socks_proxy"
+  add_line "/etc/environment" "no_proxy=${proxy_exclusion_list}" "no_proxy"
+  add_line "/etc/environment" "HTTP_PROXY=http://${server}:${http_https_port}" "HTTP_PROXY"
+  add_line "/etc/environment" "HTTPS_PROXY=http://${server}:${http_https_port}" "HTTPS_PROXY"
+  add_line "/etc/environment" "FTP_PROXY=http://${server}:${ftp_port}" "FTP_PROXY"
+  add_line "/etc/environment" "SOCKS_PROXY=http://${server}:${socks_port}" "SOCKS_PROXY"
+  add_line "/etc/environment" "NO_PROXY=${proxy_exclusion_list}" "NO_PROXY"
+}
 
-  if [ "$DB_PASSWORD" == "" ] ||
-    [ "$REDIS_PASSWORD" == "" ] ||
-    [ "$MAIL_USERNAME" == "" ] ||
-    [ "$MAIL_PASSWORD" == "" ] ||
-    [ "$MQTT_AUTH_PASSWORD" == "" ]; then
-    echo -e "${CYAN}(!)${NC} Please provide the required credentials e.g., DB_PASSWORD, REDIS_PASSWORD, MAIL_USERNAME,"$(
-    )" MAIL_PASSWORD, MQTT_AUTH_PASSWORD in $OUTPUT_DIR/deployment/.env.production file and run"$(
-    )"\"./iotportaldevicemanagement.sh offline-install\""
-    exit 1
+function setup_time() {
+  $SUDO timedatectl set-timezone Asia/Kuala_Lumpur
+  $SUDO timedatectl set-local-rtc false
+  $SUDO timedatectl set-ntp false
+  $SUDO date -s "$(https_proxy=http://${server}:${http_https_port} wget --no-check-certificate --server-response --spider https://google.com 2>&1 | grep -i '^ *Date:' | head -1 | sed 's/^[^:]*: //')"
+  # Install hwclock
+  $SUDO apt update -y
+  $SUDO apt install util-linux-extra -y  || true
+  $SUDO hwclock --systohc
+}
+
+function setup_autoproxy() {
+  if command -v gsettings >/dev/null 2>&1; then
+    gsettings set org.gnome.system.proxy mode 'auto'
+    gsettings set org.gnome.system.proxy autoconfig-url "$autoproxy_url"
+    gsettings set org.gnome.system.proxy ignore-hosts "['${proxy_exclusion_list//,/','}']"
+    $SUDO gsettings set org.gnome.system.proxy mode 'auto'
+    $SUDO gsettings set org.gnome.system.proxy autoconfig-url "$autoproxy_url"
+    $SUDO gsettings set org.gnome.system.proxy ignore-hosts "['${proxy_exclusion_list//,/','}']"
   fi
 }
 
-function cloneRepos() {
-  if [ ! -d "$OUTPUT_DIR/api" ]; then
-    git clone --depth 1 --branch "$API_VERSION" "$SOURCE_URL"api "$OUTPUT_DIR"/api
-  fi
-
-  if [ ! -d "$OUTPUT_DIR/nginx" ]; then
-    git clone --depth 1 --branch "$NGINX_VERSION" "$SOURCE_URL"nginx "$OUTPUT_DIR"/nginx
-  fi
-
-  if [ ! -d "$OUTPUT_DIR/postgres" ]; then
-    git clone --depth 1 --branch "$POSTGRES_VERSION" "$SOURCE_URL"postgres "$OUTPUT_DIR"/postgres
-  fi
-
-  if [ ! -d "$OUTPUT_DIR/redis" ]; then
-    git clone --depth 1 --branch "$REDIS_VERSION" "$SOURCE_URL"redis "$OUTPUT_DIR"/redis
-  fi
-
-  if [ ! -d "$OUTPUT_DIR/docker-vernemq" ]; then
-    git clone --depth 1 --branch "$VERNEMQ_VERSION" "$DOCKER_VERNEMQ_SOURCE_URL"docker-vernemq "$OUTPUT_DIR"/docker-vernemq
-  fi
-
-  if [ ! -d "$OUTPUT_DIR/web" ]; then
-    git clone --depth 1 --branch "$WEB_VERSION" "$SOURCE_URL"web "$OUTPUT_DIR"/web
-  fi
-
-  if [ ! -d "$OUTPUT_DIR/deployment" ]; then
-    git clone --depth 1 --branch "$DEPLOYMENT_VERSION" "$SOURCE_URL"deployment "$OUTPUT_DIR"/deployment
-  fi
+function setup_ssh() {
+  echo 'Do you want to setup SSH as well? (Y/N)'
+  read -r varssh
+  case $varssh in
+    [Yy]*) 
+      $SUDO apt update
+      echo yes Y | $SUDO apt install openssh-server 
+      ;;
+    *) echo "Thank You" ;;
+  esac
 }
 
-function generateCredentials() {
-  DOMAIN=$1
-  GENERATE_APP_KEY=$2
+function setup_docker_proxy() {
+  echo 'Do you want to configure Docker proxy settings as well? (Y/N)'
+  read -r vardocker
+  case $vardocker in
+    [Yy]*)
+      mkdir -p ~/.docker
+      cat <<EOF > ~/.docker/config.json
+{
+  "proxies": {
+    "default": {
+      "httpProxy": "http://${server}:${http_https_port}",
+      "httpsProxy": "http://${server}:${http_https_port}",
+      "noProxy": "${proxy_exclusion_list}"
+    }
+  }
+}
+EOF
+      echo "Docker proxy settings configured."
 
-  cd "$OUTPUT_DIR"/deployment
-
-  if [ "$GENERATE_APP_KEY" == "y" ]; then
-    echo -e "${CYAN}(!)${NC} Generating APP_KEY..."
-    APP_KEY=$(docker run --rm --entrypoint php iotportaldevicemanagement-api artisan key:generate --show)
-    sed -i "s~APP_KEY=.*~APP_KEY=$APP_KEY~g" .env.production
-  elif [ "$GENERATE_APP_KEY" == "n" ]; then
-    echo -e "${CYAN}(!)${NC} Skipping generate APP_KEY..."
-  else
-    echo -e "${CYAN}(!) IoT Portal Device Management installation canceled. ${NC}"
-    exit 1
-  fi
-
-  sed -i "s~APP_HOST=.*~APP_HOST=$DOMAIN~g" .env.production
+      # Configure Docker daemon proxy settings
+      $SUDO mkdir -p /etc/systemd/system/docker.service.d
+      $SUDO bash -c "cat <<EOF > /etc/systemd/system/docker.service.d/http-proxy.conf
+[Service]
+Environment=\"HTTP_PROXY=http://${server}:${http_https_port}\"
+Environment=\"HTTPS_PROXY=http://${server}:${http_https_port}\"
+Environment=\"NO_PROXY=${proxy_exclusion_list}\"
+EOF"
+      $SUDO systemctl daemon-reload
+      $SUDO systemctl restart docker
+      echo "Docker daemon proxy settings configured."
+      ;;
+    *) echo "Docker proxy configuration skipped." ;;
+  esac
 }
 
-function readEnvs() {
-  cd "$OUTPUT_DIR"/deployment
-
-  # Source the .env file
-  . ./.env.production
+function setup_docker_registry_mirror() {
+  echo 'Do you want to configure Docker registry mirrors as well? (Y/N)'
+  read -r varmirror
+  case $varmirror in
+    [Yy]*)
+      $SUDO mkdir -p /etc/docker
+      $SUDO bash -c "cat <<EOF > /etc/docker/daemon.json
+{
+  \"registry-mirrors\": [\"$docker_registry_mirror_url\"]
+}
+EOF"
+      $SUDO systemctl restart docker
+      echo "Docker registry mirrors configured."
+      ;;
+    *) echo "Docker registry mirror configuration skipped." ;;
+  esac
 }
 
-function createNamedVolumes() {
-  createNamedVolume "iotportaldevicemanagement_certificates"
-  createNamedVolume "iotportaldevicemanagement_nginx-certificates"
-  createNamedVolume "iotportaldevicemanagement_postgres-certificates"
-  createNamedVolume "iotportaldevicemanagement_redis-certificates"
-  createNamedVolume "iotportaldevicemanagement_vernemq-certificates"
-  createNamedVolume "iotportaldevicemanagement_redis-acl"
+function install_trust_chains() {
+  echo 'Do you want to install trust chains as well? (Y/N)'
+  read -r vartrust
+  case $vartrust in
+    [Yy]*)
+      set -e
+      source /etc/os-release
+
+      # Install unzip and wget if not installed
+      if ! [ -x "$(command -v unzip)" ]; then
+        echo 'Installing unzip...'
+        $SUDO apt-get update && $SUDO apt-get install -y unzip
+      fi
+
+      if ! [ -x "$(command -v wget)" ]; then
+        echo 'Installing wget...'
+        $SUDO apt-get update && $SUDO apt-get install -y wget
+      fi
+
+      case $NAME in
+      Ubuntu)
+          certs_folder='/usr/local/share/ca-certificates'
+          cmd='/usr/sbin/update-ca-certificates'
+          ;;
+      SLES)
+          certs_folder='/etc/pki/trust/anchors'
+          cmd='/usr/sbin/update-ca-certificates'
+          ;;
+      Fedora)
+          certs_folder='/etc/pki/ca-trust/source/anchors'
+          cmd='/bin/update-ca-trust'
+          ;;
+      "CentOS Stream")
+          certs_folder='/etc/pki/ca-trust/source/anchors'
+          cmd='/bin/update-ca-trust extract'
+          ;;
+      "Red Hat Enterprise Linux")
+          certs_folder='/etc/pki/ca-trust/source/anchors'
+          cmd='/bin/update-ca-trust'
+          ;;
+      *)
+          echo "Error: unsupported OS $NAME"
+          exit 1
+          ;;
+      esac
+
+      temp_folder=$(mktemp -d)
+      for certs_file in "IntelSHA256TrustChain-Base64.zip" "IntelSHA384TrustChain-Base64.zip" "IntelSHA512TrustChain-Base64.zip"; do
+        certs_url="http://certificates.intel.com/repository/certificates/TrustBundles/$certs_file"
+        $SUDO wget --no-proxy $certs_url -O $temp_folder/$certs_file
+        $SUDO unzip -u $temp_folder/$certs_file -d $certs_folder
+        $SUDO rm $temp_folder/$certs_file
+      done
+      rmdir $temp_folder
+      
+      $SUDO chmod 644 $certs_folder/*.crt
+      $SUDO $cmd
+
+      # Restart Docker service
+      $SUDO systemctl restart docker
+      ;;
+    *) echo "Trust chains installation skipped." ;;
+  esac
 }
 
-function generateCerts() {
-  DOMAIN=$1
+setup_proxies
+setup_time
+setup_autoproxy
+setup_ssh
+setup_docker_proxy
+setup_docker_registry_mirror
+install_trust_chains
 
-  cd "$OUTPUT_DIR"/deployment
-
-  docker build -f build/Dockerfile.production -t iotportaldevicemanagement-builder --build-arg HOSTNAME="$DOMAIN" .
-
-  docker run -d --name=iotportaldevicemanagement-builder \
-    -v iotportaldevicemanagement_certificates:/certificates \
-    -v iotportaldevicemanagement_nginx-certificates:/nginx-certificates \
-    -v iotportaldevicemanagement_postgres-certificates:/postgres-certificates \
-    -v iotportaldevicemanagement_redis-certificates:/redis-certificates \
-    -v iotportaldevicemanagement_vernemq-certificates:/vernemq-certificates \
-    iotportaldevicemanagement-builder
-
-  # Copy the certificates and keys out for backup
-  createCertificatesDir
-  docker cp iotportaldevicemanagement-builder:/certificates/. "$CERTIFICATE_OUTPUT_DIR"
-  docker cp iotportaldevicemanagement-builder:/nginx-certificates/. "$CERTIFICATE_OUTPUT_DIR"/nginx-certificates
-  docker cp iotportaldevicemanagement-builder:/postgres-certificates/. "$CERTIFICATE_OUTPUT_DIR"/postgres-certificates
-  docker cp iotportaldevicemanagement-builder:/redis-certificates/. "$CERTIFICATE_OUTPUT_DIR"/redis-certificates
-  docker cp iotportaldevicemanagement-builder:/vernemq-certificates/. "$CERTIFICATE_OUTPUT_DIR"/vernemq-certificates
-
-  docker container stop iotportaldevicemanagement-builder
-  docker container rm iotportaldevicemanagement-builder
-}
-
-function buildApiImage() {
-  cd "$OUTPUT_DIR"/api
-
-  docker build -f dockerfiles/build/Dockerfile.production -t api-builder .
-
-  docker build -f dockerfiles/Dockerfile.production -t iotportaldevicemanagement-api .
-}
-
-function buildNginxImage() {
-  cd "$OUTPUT_DIR"/nginx
-
-  docker build -f Dockerfile.production -t iotportaldevicemanagement-nginx .
-}
-
-function buildPostgresImage() {
-  cd "$OUTPUT_DIR"/postgres
-
-  docker build -f Dockerfile.production -t iotportaldevicemanagement-postgres .
-}
-
-function buildRedisImage() {
-  cd "$OUTPUT_DIR"/redis
-
-  docker build -f build/Dockerfile.production -t redis-builder \
-    --build-arg REDIS_USERNAME="$DOCKER_REDIS_USERNAME" \
-    --build-arg REDIS_PASSWORD="$DOCKER_REDIS_PASSWORD" .
-
-  # Create acl named volume for redis
-  docker run -d --name=redis-builder -v iotportaldevicemanagement_redis-acl:/etc/redis/acl redis-builder
-
-  docker container stop redis-builder
-  docker container rm redis-builder
-
-  docker build -f Dockerfile.production -t iotportaldevicemanagement-redis .
-}
-
-function buildVernemqImage() {
-  cd "$OUTPUT_DIR"/docker-vernemq
-
-  docker build -f Dockerfile.alpine -t iotportaldevicemanagement-vernemq .
-}
-
-function buildWebImage() {
-  cd "$OUTPUT_DIR"/web
-
-  docker build -f dockerfiles/Dockerfile.production -t iotportaldevicemanagement-web \
-    --build-arg NEXT_PUBLIC_VERSION="$NEXT_PUBLIC_VERSION" .
-}
-
-function createNamedVolume() {
-  echo "Creating named volume $1"
-  docker volume create --driver local \
-    --label "com.iotportaldevicemanagement.product=iotportaldevicemanagement" \
-    "$1"
-}
-
-function dockerImagePrune() {
-  docker image prune --all --force --filter="label=com.iotportaldevicemanagement.product=iotportaldevicemanagement"
-}
-
-function createCertificatesDir() {
-  createDir "$CERTIFICATE_OUTPUT_DIR/nginx-certificates"
-  createDir "$CERTIFICATE_OUTPUT_DIR/postgres-certificates"
-  createDir "$CERTIFICATE_OUTPUT_DIR/redis-certificates"
-  createDir "$CERTIFICATE_OUTPUT_DIR/vernemq-certificates"
-}
-
-function createDir() {
-  if [ ! -d "$1" ]; then
-    echo "Creating directory $1"
-    mkdir -p "$1"
-  fi
-}
-
-# Commands
-
-case $1 in
-"install")
-  install pull
-  ;;
-"offline-install")
-  install noPull
-  ;;
-"start" | "restart")
-  restart
-  ;;
-"stop")
-  dockerComposeDown
-  ;;
-"rebuild")
-  rebuild
-  ;;
-"migrate-db")
-  migrateDb
-  ;;
-"seed-db")
-  seedDb
-  ;;
-"seed-db-sample")
-  seedDbSample
-  ;;
-"clear-db")
-  clearDb
-  ;;
-"uninstall")
-  uninstall
-  ;;
-esac
+echo 'Please restart your system for changes to take effect.'
